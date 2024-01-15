@@ -1,0 +1,294 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    autoscaling.knative.dev/min-scale: "1"
+    serving.knative.dev/creator: system:admin
+  creationTimestamp: "2024-01-12T09:50:35Z"
+  generateName: etcd-grpc-00001-deployment-7678666d56-
+  labels:
+    app: etcd-grpc-00001
+    pod-template-hash: 7678666d56
+    service.istio.io/canonical-name: etcd-grpc
+    service.istio.io/canonical-revision: etcd-grpc-00001
+    serving.knative.dev/configuration: etcd-grpc
+    serving.knative.dev/configurationGeneration: "1"
+    serving.knative.dev/configurationUID: 3fd97cfc-ae79-4611-ba4b-82d410d43bb6
+    serving.knative.dev/revision: etcd-grpc-00001
+    serving.knative.dev/revisionUID: 944f3780-0d51-4ad0-ad9c-35940c3b5318
+    serving.knative.dev/service: etcd-grpc
+    serving.knative.dev/serviceUID: 4e4e632e-84b8-4e2a-8719-22c50d98dec3
+  name: etcd-grpc-00001-deployment-7678666d56-b4j5d
+  namespace: default
+  ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: ReplicaSet
+      name: etcd-grpc-00001-deployment-7678666d56
+      uid: d4672ac4-0769-4358-a0fe-377dea94167e
+  resourceVersion: "1927511"
+  uid: 5a69d440-4df6-4fd2-a39a-f78dedb9d98d
+spec:
+  containers:
+    - command:
+        - /usr/local/bin/etcd
+        - --data-dir
+        - /var/lib/etcd
+        - --listen-client-urls
+        - http://0.0.0.0:2379
+        - --advertise-client-urls
+        - http://127.0.0.1:2379
+        - --log-level
+        - debug
+      env:
+        - name: PORT
+          value: "2379"
+        - name: K_REVISION
+          value: etcd-grpc-00001
+        - name: K_CONFIGURATION
+          value: etcd-grpc
+        - name: K_SERVICE
+          value: etcd-grpc
+      image: registry.k8s.io/etcd@sha256:64b9ea357325d5db9f8a723dcf503b5a449177b17ac87d69481e126bb724c263
+      imagePullPolicy: IfNotPresent
+      lifecycle:
+        preStop:
+          httpGet:
+            path: /wait-for-drain
+            port: 8022
+            scheme: HTTP
+      name: etcd
+      ports:
+        - containerPort: 2379
+          name: user-port
+          protocol: TCP
+      resources: {}
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-sl9pl
+          readOnly: true
+    - env:
+        - name: SERVING_NAMESPACE
+          value: default
+        - name: SERVING_SERVICE
+          value: etcd-grpc
+        - name: SERVING_CONFIGURATION
+          value: etcd-grpc
+        - name: SERVING_REVISION
+          value: etcd-grpc-00001
+        - name: QUEUE_SERVING_PORT
+          value: "8012"
+        - name: QUEUE_SERVING_TLS_PORT
+          value: "8112"
+        - name: CONTAINER_CONCURRENCY
+          value: "0"
+        - name: REVISION_TIMEOUT_SECONDS
+          value: "300"
+        - name: REVISION_RESPONSE_START_TIMEOUT_SECONDS
+          value: "0"
+        - name: REVISION_IDLE_TIMEOUT_SECONDS
+          value: "0"
+        - name: SERVING_POD
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: SERVING_POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: SERVING_LOGGING_CONFIG
+        - name: SERVING_LOGGING_LEVEL
+        - name: SERVING_REQUEST_LOG_TEMPLATE
+          value: '{"httpRequest": {"requestMethod": "{{.Request.Method}}", "requestUrl":
+        "{{js .Request.RequestURI}}", "requestSize": "{{.Request.ContentLength}}",
+        "status": {{.Response.Code}}, "responseSize": "{{.Response.Size}}", "userAgent":
+        "{{js .Request.UserAgent}}", "remoteIp": "{{js .Request.RemoteAddr}}", "serverIp":
+        "{{.Revision.PodIP}}", "referer": "{{js .Request.Referer}}", "latency": "{{.Response.Latency}}s",
+        "protocol": "{{.Request.Proto}}"}, "traceId": "{{index .Request.Header "X-B3-Traceid"}}"}'
+        - name: SERVING_ENABLE_REQUEST_LOG
+          value: "false"
+        - name: SERVING_REQUEST_METRICS_BACKEND
+          value: prometheus
+        - name: SERVING_REQUEST_METRICS_REPORTING_PERIOD_SECONDS
+          value: "5"
+        - name: TRACING_CONFIG_BACKEND
+          value: none
+        - name: TRACING_CONFIG_ZIPKIN_ENDPOINT
+        - name: TRACING_CONFIG_DEBUG
+          value: "false"
+        - name: TRACING_CONFIG_SAMPLE_RATE
+          value: "0.1"
+        - name: USER_PORT
+          value: "2379"
+        - name: SYSTEM_NAMESPACE
+          value: knative-serving
+        - name: METRICS_DOMAIN
+          value: knative.dev/internal/serving
+        - name: SERVING_READINESS_PROBE
+          value: '{"grpc":{"port":2379,"service":""},"initialDelaySeconds":10,"successThreshold":1}'
+        - name: ENABLE_PROFILING
+          value: "false"
+        - name: SERVING_ENABLE_PROBE_REQUEST_LOG
+          value: "false"
+        - name: METRICS_COLLECTOR_ADDRESS
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: ENABLE_HTTP2_AUTO_DETECTION
+          value: "false"
+        - name: ROOT_CA
+      image: ko.local/queue-39be6f1d08a095bd076a71d288d295b6:3a602c3a7623cbdde6613e33a70bbef0034fd89b50fb9de9e385adfc8d3ee297
+      imagePullPolicy: IfNotPresent
+      name: queue-proxy
+      ports:
+        - containerPort: 8022
+          name: http-queueadm
+          protocol: TCP
+        - containerPort: 9090
+          name: http-autometric
+          protocol: TCP
+        - containerPort: 9091
+          name: http-usermetric
+          protocol: TCP
+        - containerPort: 8012
+          name: queue-port
+          protocol: TCP
+        - containerPort: 8112
+          name: https-port
+          protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          httpHeaders:
+            - name: K-Network-Probe
+              value: queue
+          path: /
+          port: 8012
+          scheme: HTTP
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources:
+        requests:
+          cpu: 25m
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+        - mountPath: /var/lib/knative/certs
+          name: server-certs
+          readOnly: true
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-sl9pl
+          readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: false
+  nodeName: colima
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 300
+  tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+  volumes:
+    - name: server-certs
+      secret:
+        defaultMode: 420
+        secretName: serving-certs
+    - name: kube-api-access-sl9pl
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+status:
+  conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2024-01-12T09:50:35Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2024-01-12T09:50:35Z"
+      message: 'containers with unready status: [queue-proxy]'
+      reason: ContainersNotReady
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2024-01-12T09:50:35Z"
+      message: 'containers with unready status: [queue-proxy]'
+      reason: ContainersNotReady
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2024-01-12T09:50:35Z"
+      status: "True"
+      type: PodScheduled
+  containerStatuses:
+    - containerID: docker://0cd2e715bb93cd384a38f785edc97c0b3fa1b73e9c284d56aa3f847e2b979ace
+      image: registry.k8s.io/etcd:3.5.1-0
+      imageID: docker-pullable://registry.k8s.io/etcd@sha256:64b9ea357325d5db9f8a723dcf503b5a449177b17ac87d69481e126bb724c263
+      lastState: {}
+      name: etcd
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2024-01-12T09:50:35Z"
+    - containerID: docker://d547324581ec093dd0d33aa6989a42536f47fd0e5e53302190c4ffc127a7c499
+      image: ko.local/queue-39be6f1d08a095bd076a71d288d295b6:3a602c3a7623cbdde6613e33a70bbef0034fd89b50fb9de9e385adfc8d3ee297
+      imageID: docker://sha256:9e59190610634f0f6a28f8a23b8e48b2aa57834032a252ddf10fa7ee40be29e1
+      lastState: {}
+      name: queue-proxy
+      ready: false
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2024-01-12T09:50:35Z"
+  hostIP: 192.168.5.1
+  phase: Running
+  podIP: 10.42.0.200
+  podIPs:
+    - ip: 10.42.0.200
+  qosClass: Burstable
+  startTime: "2024-01-12T09:50:35Z"

@@ -1,0 +1,16 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: runtime
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+    spec:
+      containers:
+      - image: quay.io/rlehmann/runtime
+        livenessProbe:
+          httpGet:
+            port: 8080 # this will directly call the user-container, not QP
