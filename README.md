@@ -75,10 +75,13 @@ first-container Liveness probe called, responding with:  true
 second-container Liveness probe called, responding with:  true
 ```
 
+### Summary
+
 * Liveness probes can be enabled without interference, <span style="color:red">but no additional header is injected</span>. So we at least would need to fix this, otherwise LivenessProbes can not target Queue-Proxy.
 * But this can cause some race conditions:
   * Queue-Proxy (and other Knative components) will not know about the UC being not live and being restarted. We'll see `HTTP/1.1 503 Service Unavailable` when calling the Knative Service
   * The same applies for sidecars. Queue-Proxy (and other Knative components) will not know about this. Depending on what the sidecar does, this can cause issues.
+
 
 ## Testing ReadinessProbes with multiple containers
 
@@ -121,7 +124,7 @@ first-container Readiness probe called, responding with:  false
 kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue"
 HTTP/1.1 200 OK
 
-# Knative also things everything is fine:
+# Knative also thinks everything is fine:
 k get configuration,ksvc,king
 NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
 configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
@@ -143,6 +146,42 @@ test-probe-00001-private               7m19s
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641752724Z","logger":"activator","caller":"net/throttler.go:331","message":"Updating Revision Throttler with: clusterIP = <nil>, trackers = 0, backends = 0","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641780141Z","logger":"activator","caller":"net/throttler.go:323","message":"Set capacity to 0 (backends: 0, index: 0/1)","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
 ```
+
+For the same test with the second container we have:
+
+```bash
+# do the same as above, until everything is ready and works
+
+# make second container not ready
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8090/toggleReady
+
+# now it gets really good, K8s is removing the endpoint because the Pod is not totally ready
+# Traffic will be sent to activator
+k get endpoints -n default
+NAME                       ENDPOINTS                         AGE
+kubernetes                 192.168.5.1:6443                  42d
+test-probe-00001           10.42.0.17:8012,10.42.0.17:8112   14m
+test-probe-00001-private                                     14m
+
+# Knative still thinks everything is great:
+ k get configuration,ksvc,king
+NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
+configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
+
+NAME                                     URL                                               LATESTCREATED      LATESTREADY        READY   REASON
+service.serving.knative.dev/test-probe   http://test-probe.default.172.17.0.100.sslip.io   test-probe-00001   test-probe-00001   True
+
+NAME                                                 READY   REASON
+ingress.networking.internal.knative.dev/test-probe   True
+
+# and traffic will work
+curl  -iv http://test-probe.default.172.17.0.100.sslip.io
+HTTP/1.1 200 OK
+
+# because Activator is only checking QP health, which does not know about the additional container.
+```
+
+### Summary
 
 If we allow ReadinessProbes for additional containers, we have at least these race conditions:
 
