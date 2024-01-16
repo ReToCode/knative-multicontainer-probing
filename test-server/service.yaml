@@ -1,0 +1,10 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: test-server
+  namespace: default
+spec:
+  template:
+    spec:
+      containers:
+      - image: ko://github.com/retocode/knative-multicontainer-probing/test-server
