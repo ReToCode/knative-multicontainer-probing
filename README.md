@@ -49,7 +49,7 @@ kubectl apply -f 2-multi-container/2-ksvc-default-liveness.yaml
 ko apply -f 2-multi-container/4-ksvc-liveness-toggle.yaml
 
 # main container liveness: false
-curl  -iv http://test-probe.default.172.17.0.100.sslip.io/toggle
+curl  -iv http://test-probe.default.172.17.0.100.sslip.io/toggleLive
 
 # Logs
 # K8s will restart the main container
@@ -58,7 +58,7 @@ Stream closed EOF for default/test-probe-00005-deployment-68f4d64498-9bkhg (firs
 second-container Liveness probe called, responding with:  true
 
 # use a curl pod to deactivate different probes
-kubectl exec deployment/curl -n default -it -- curl -iv http://<pod-ip>:8090/toggle
+kubectl exec deployment/curl -n default -it -- curl -iv http://<pod-ip>:8090/toggleLive
 
 # Logs
 # K8s will restart the sidecar container
@@ -81,6 +81,68 @@ second-container Liveness probe called, responding with:  true
   * The same applies for sidecars. Queue-Proxy (and other Knative components) will not know about this. Depending on what the sidecar does, this can cause issues.
 
 ## Testing ReadinessProbes with multiple containers
+
+```bash
+ko apply -f 2-multi-container/5-ksvc-readiness-toggle.yaml
+
+# toggle readiness in main container
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8080/toggleReady
+
+# Knative Service is not ready, as we are waiting for Endpoints
+k get ksvc
+NAME         URL                                               LATESTCREATED      LATESTREADY   READY     REASON
+test-probe   http://test-probe.default.172.17.0.100.sslip.io   test-probe-00001                 Unknown   RevisionMissing
+
+k get configuration
+NAME         LATESTCREATED      LATESTREADY   READY     REASON
+test-probe   test-probe-00001                 Unknown
+
+k get king
+No resources found in default namespace.
+
+# Knative Service returns a 404
+curl -iv http://test-probe.default.172.17.0.100.sslip.io
+HTTP/1.1 404 Not Found
+
+# set the second container to ready
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8090/toggleReady
+
+# every thing works now as expected
+
+# set the first container to not ready
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8080/toggleReady
+
+# QP knows about it and starts polling again
+queue-proxy context deadline exceeded
+first-container Readiness probe called, responding with:  false
+first-container Readiness probe called, responding with:  false
+
+# But QPs own readiness-probe stays ok:
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue"
+HTTP/1.1 200 OK
+
+# Knative also things everything is fine:
+k get configuration,ksvc,king
+NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
+configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
+
+NAME                                     URL                                               LATESTCREATED      LATESTREADY        READY   REASON
+service.serving.knative.dev/test-probe   http://test-probe.default.172.17.0.100.sslip.io   test-probe-00001   test-probe-00001   True
+
+NAME                                                 READY   REASON
+ingress.networking.internal.knative.dev/test-probe   True
+
+# But K8s has removed the endpoints:
+k get endpoints -n default test-probe-00001-private
+NAME                       ENDPOINTS   AGE
+test-probe-00001-private               7m19s
+
+# So we are sending traffic to activator now, who will log:
+{"severity":"WARNING","timestamp":"2024-01-16T14:53:44.641328597Z","logger":"activator","caller":"net/revision_backends.go:342","message":"Failed probing pods","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001","curDests":{"ready":"","notReady":"10.42.0.18:8012"},"error":"error roundtripping http://10.42.0.18:8012/healthz: context deadline exceeded"}
+{"severity":"INFO","timestamp":"2024-01-16T14:53:44.641432431Z","logger":"activator","caller":"net/revision_backends.go:328","message":"Need to reprobe pods who became non-ready","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001","IPs":{"keys":"10.42.0.18:8012"}}
+{"severity":"INFO","timestamp":"2024-01-16T14:53:44.641752724Z","logger":"activator","caller":"net/throttler.go:331","message":"Updating Revision Throttler with: clusterIP = <nil>, trackers = 0, backends = 0","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
+{"severity":"INFO","timestamp":"2024-01-16T14:53:44.641780141Z","logger":"activator","caller":"net/throttler.go:323","message":"Set capacity to 0 (backends: 0, index: 0/1)","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
+```
 
 If we allow ReadinessProbes for additional containers, we have at least these race conditions:
 

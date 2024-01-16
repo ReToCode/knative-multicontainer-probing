@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-var isHealthy = true
+var isLive = true
+var isReady = false
 
 func main() {
 	port := os.Getenv("PORT")
@@ -18,7 +19,8 @@ func main() {
 	http.HandleFunc("/", rootHandler)
 	http.HandleFunc("/live", liveHandler)
 	http.HandleFunc("/ready", readyHandler)
-	http.HandleFunc("/toggle", toggleHandler)
+	http.HandleFunc("/toggleLive", toggleLiveHandler)
+	http.HandleFunc("/toggleReady", toggleReadyHandler)
 	srv := &http.Server{
 		Addr:         ":" + port,
 		WriteTimeout: 15 * time.Second,
@@ -28,9 +30,15 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-func toggleHandler(writer http.ResponseWriter, request *http.Request) {
-	isHealthy = !isHealthy
-	fmt.Println("Healthy is now set to: ", isHealthy)
+func toggleLiveHandler(writer http.ResponseWriter, request *http.Request) {
+	isLive = !isLive
+	fmt.Println("Liveness is now: ", isLive)
+	writer.WriteHeader(http.StatusOK)
+}
+
+func toggleReadyHandler(writer http.ResponseWriter, request *http.Request) {
+	isReady = !isReady
+	fmt.Println("Readiness is now: ", isLive)
 	writer.WriteHeader(http.StatusOK)
 }
 
@@ -40,13 +48,18 @@ func rootHandler(writer http.ResponseWriter, request *http.Request) {
 }
 
 func readyHandler(writer http.ResponseWriter, request *http.Request) {
-	fmt.Println("Readiness probe called")
-	writer.WriteHeader(http.StatusOK)
+	fmt.Println("Readiness probe called, responding with: ", isReady)
+
+	if isReady {
+		writer.WriteHeader(http.StatusOK)
+	} else {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+	}
 }
 
 func liveHandler(writer http.ResponseWriter, request *http.Request) {
-	fmt.Println("Liveness probe called, responding with: ", isHealthy)
-	if isHealthy {
+	fmt.Println("Liveness probe called, responding with: ", isLive)
+	if isLive {
 		writer.WriteHeader(http.StatusOK)
 	} else {
 		writer.WriteHeader(http.StatusServiceUnavailable)
