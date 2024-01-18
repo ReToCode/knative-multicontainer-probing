@@ -24,6 +24,19 @@ kubectl patch configmap/config-domain \
   --namespace knative-serving \
   --type merge \
   --patch "{\"data\":{\"172.17.0.100.sslip.io\":\"\"}}"
+  
+# enable request logging
+## Activator and Q-P
+kubectl patch configmap/config-observability \
+  --namespace knative-serving \
+  --type merge \
+  --patch '{"data":{"logging.enable-request-log":"true"}}'
+  
+## Kourier gateway
+kubectl patch configmap/config-kourier \
+  --namespace knative-serving \
+  --type merge \
+  --patch '{"data":{"logging.enable-request-log":"true"}}'
 ```
 
 ## Testing single containers
@@ -36,6 +49,130 @@ kubectl apply -f 1-single-container/xx.yaml
 kubectl apply -f 1-single-container/1-ksvc-default.yaml
 kubectl apply -f 1-single-container/6-ksvc-exec-probe-readiness.yaml
 ```
+
+### Cross port probing
+
+It is possible to test the health on another port than the data-traffic:
+
+```bash
+kubectl apply -f 1-single-container/12-cross-port-readiness.yaml
+
+# The tests will be routed through Queue-Proxy:
+#  - name: SERVING_READINESS_PROBE
+#    value: '{"httpGet":{"port":8090,"host":"127.0.0.1","scheme":"HTTP","httpHeaders":[{"name":"K-Kubelet-Probe","value":"queue"}]},"successThreshold":1}'
+```
+
+### Exec probes
+
+#### Readiness
+
+```bash
+ko apply -f 1-single-container/10-ksvc-exec-probe-readiness.yaml
+
+# this creates a healthy server, all is ok
+
+# start failing the exec probes
+curl -iv http://runtime.default.172.17.0.100.sslip.io/toggleExec
+
+# Knative is happy
+k get ksvc,configuration,revision,king
+NAME                                  URL                                            LATESTCREATED   LATESTREADY     READY   REASON
+service.serving.knative.dev/runtime   http://runtime.default.172.17.0.100.sslip.io   runtime-00001   runtime-00001   True
+
+NAME                                        LATESTCREATED   LATESTREADY     READY   REASON
+configuration.serving.knative.dev/runtime   runtime-00001   runtime-00001   True
+
+NAME                                         CONFIG NAME   K8S SERVICE NAME   GENERATION   READY   REASON   ACTUAL REPLICAS   DESIRED REPLICAS
+revision.serving.knative.dev/runtime-00001   runtime                          1            True             0                 1
+
+NAME                                              READY   REASON
+ingress.networking.internal.knative.dev/runtime   True
+
+# Queue-Proxy readiness is ok
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.29:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
+HTTP/1.1 200 OK
+
+# Kubernetes is not happy, endpoints are removed from private service
+k get endpoints,pod
+NAME                              ENDPOINTS                         AGE
+endpoints/runtime-00001           10.42.0.20:8012,10.42.0.20:8112   2m58s
+endpoints/runtime-00001-private                                     2m58s
+
+NAME                                          READY   STATUS    RESTARTS       AGE
+pod/runtime-00001-deployment-c56d87d5-rj5nl   1/2     Running   0              2m58s
+
+# we cannot call the service any longer, as traffic will be sent do activator (10.42.0.20) 
+# activator is holding the requests until the probe is ready again until you get
+HTTP/1.1 504 Gateway Timeout
+activator request timeout%
+```
+
+#### Summary
+* This works as expected traffic wise, even though Knative does not reflect the state properly
+* Queue-Proxy probe is reflecting the "wrong" state
+* This only works because K8s will remove the endpoints from the private service, so Activator cannot route traffic any longer
+* The situation will not resolve itself, requests will be buffered until that probe is good again
+
+
+#### Liveness
+
+```bash
+ko apply -f 1-single-container/11-ksvc-exec-probe-liveness.yaml
+
+# this creates a healthy server, all is ok
+
+# start failing the liveness probe
+curl -iv http://runtime.default.172.17.0.100.sslip.io/toggleExec
+
+# Knative is happy
+
+# Kubernetes is not happy for a short time and will restart the user-container
+
+# Queue-Proxy tries to forward requests, but will error out:
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-18T14:36:05.753218441Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 8\nTCP: inuse 0 orphan 0 tw 15 alloc 185 mem 0\nUDP: inuse 0 mem 0\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/runtime-00001","knative.dev/pod":"runtime-00001-deployment-7b9c49d676-dlxmt","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52782", "serverIp": "10.42.0.34", "referer": "", "latency": "0.001448584s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52782", "serverIp": "10.42.0.34", "referer": "", "latency": "0.000335542s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-18T14:36:06.781777885Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 8\nTCP: inuse 0 orphan 0 tw 15 alloc 185 mem 0\nUDP: inuse 0 mem 0\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/runtime-00001","knative.dev/pod":"runtime-00001-deployment-7b9c49d676-dlxmt","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52782", "serverIp": "10.42.0.34", "referer": "", "latency": "0.00029575s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-18T14:36:07.815057125Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 8\nTCP: inuse 0 orphan 0 tw 15 alloc 185 mem 0\nUDP: inuse 0 mem 0\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/runtime-00001","knative.dev/pod":"runtime-00001-deployment-7b9c49d676-dlxmt","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52782", "serverIp": "10.42.0.34", "referer": "", "latency": "0.000280208s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-18T14:36:08.847556037Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 8\nTCP: inuse 0 orphan 0 tw 15 alloc 185 mem 0\nUDP: inuse 0 mem 0\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/runtime-00001","knative.dev/pod":"runtime-00001-deployment-7b9c49d676-dlxmt","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-18T14:36:09.897340832Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 8\nTCP: inuse 0 orphan 0 tw 15 alloc 185 mem 0\nUDP: inuse 0 mem 0\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/runtime-00001","knative.dev/pod":"runtime-00001-deployment-7b9c49d676-dlxmt","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+
+# The user sees
+* Connection #0 to host runtime.default.172.17.0.100.sslip.io left intact
+*   Trying 172.17.0.100:80...
+* Connected to runtime.default.172.17.0.100.sslip.io (172.17.0.100) port 80
+> GET / HTTP/1.1
+> Host: runtime.default.172.17.0.100.sslip.io
+> User-Agent: curl/8.4.0
+> Accept: */*
+>
+< HTTP/1.1 502 Bad Gateway
+HTTP/1.1 502 Bad Gateway
+< content-length: 53
+content-length: 53
+< content-type: text/plain; charset=utf-8
+content-type: text/plain; charset=utf-8
+< date: Thu, 18 Jan 2024 14:36:09 GMT
+date: Thu, 18 Jan 2024 14:36:09 GMT
+< x-content-type-options: nosniff
+x-content-type-options: nosniff
+< x-envoy-upstream-service-time: 1
+x-envoy-upstream-service-time: 1
+< server: envoy
+server: envoy
+
+<
+dial tcp 127.0.0.1:8080: connect: connection refused
+```
+
+#### Summary
+* Exec Liveness probes do have a race-condition
+* As Queue-Proxy is not aware of the (restarting) state of the User-Container, it tries to send traffic to a closed socket
+* For a short period of time, this causes errors to be propagated to the caller outside the system
+* This can be omitted, when the readiness probe fails at the same time as the liveness probe, then traffic is removed during restart 
+
 
 ## Testing LivenessProbes with multiple containers
 
@@ -120,11 +257,11 @@ queue-proxy context deadline exceeded
 first-container Readiness probe called, responding with:  false
 first-container Readiness probe called, responding with:  false
 
-# But QPs own readiness-probe stays ok:
-kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue"
-HTTP/1.1 200 OK
+# QPs own readiness-probe starts to fail:
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
+HTTP/1.1 503 Service Unavailable
 
-# Knative also thinks everything is fine:
+# But, Knative still thinks everything is fine:
 k get configuration,ksvc,king
 NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
 configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
@@ -140,7 +277,8 @@ k get endpoints -n default test-probe-00001-private
 NAME                       ENDPOINTS   AGE
 test-probe-00001-private               7m19s
 
-# So we are sending traffic to activator now, who will log:
+# So we are sending traffic to activator now, who will log requests will be hold there until the timeout is reached OR
+# the pod gets ready again 
 {"severity":"WARNING","timestamp":"2024-01-16T14:53:44.641328597Z","logger":"activator","caller":"net/revision_backends.go:342","message":"Failed probing pods","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001","curDests":{"ready":"","notReady":"10.42.0.18:8012"},"error":"error roundtripping http://10.42.0.18:8012/healthz: context deadline exceeded"}
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641432431Z","logger":"activator","caller":"net/revision_backends.go:328","message":"Need to reprobe pods who became non-ready","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001","IPs":{"keys":"10.42.0.18:8012"}}
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641752724Z","logger":"activator","caller":"net/throttler.go:331","message":"Updating Revision Throttler with: clusterIP = <nil>, trackers = 0, backends = 0","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
@@ -174,7 +312,7 @@ service.serving.knative.dev/test-probe   http://test-probe.default.172.17.0.100.
 NAME                                                 READY   REASON
 ingress.networking.internal.knative.dev/test-probe   True
 
-# and traffic will work
+# and traffic will work, which it should not
 curl  -iv http://test-probe.default.172.17.0.100.sslip.io
 HTTP/1.1 200 OK
 
@@ -187,5 +325,3 @@ If we allow ReadinessProbes for additional containers, we have at least these ra
 
 - If a sidecar container does not become ready, the `Revision`, `Configuration` and `KService` are in unknown status.
 - `KIngress` object is not created.
-
-
