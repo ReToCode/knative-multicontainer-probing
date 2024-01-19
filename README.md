@@ -168,7 +168,7 @@ dial tcp 127.0.0.1:8080: connect: connection refused
 ```
 
 #### Summary
-* Exec Liveness probes do have a race-condition
+* Exec liveness probes do have a race-condition
 * As Queue-Proxy is not aware of the (restarting) state of the User-Container, it tries to send traffic to a closed socket
 * For a short period of time, this causes errors to be propagated to the caller outside the system
 * This can be omitted, when the readiness probe fails at the same time as the liveness probe, then traffic is removed during restart 
@@ -185,39 +185,68 @@ kubectl apply -f 2-multi-container/2-ksvc-default-liveness.yaml
 ```bash
 ko apply -f 2-multi-container/4-ksvc-liveness-toggle.yaml
 
-# main container liveness: false
+# toggle the main containers liveness to false
 curl  -iv http://test-probe.default.172.17.0.100.sslip.io/toggleLive
 
-# Logs
-# K8s will restart the main container
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:24:09.915295493Z","logger":"queueproxy","caller":"sharedmain/handlers.go:107","message":"Attached drain handler from user-container&{GET /wait-for-drain HTTP/1.1 1 1 map[Accept:[*/*] Accept-Encoding:[gzip] User-Agent:[kube-lifecycle/1.28]] {} <nil> 0 ] false 10.42.0.14:8022 map] map] <nil> map] 10.42.0.1:46226 /wait-for-drain <nil> <nil> <nil> 0x40002c4500}","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-9bkhg"}
-Stream closed EOF for default/test-probe-00005-deployment-68f4d64498-9bkhg (first-container)
-second-container Liveness probe called, responding with:  true
+# Check the Queue-Proxys readiness probe
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
+HTTP/1.1 200 OK
 
+# K8s will restart the first container, but Knative will not know about this
+Stream closed EOF for default/test-probe-00001-deployment-78cbfd5cb6-tmsfm (first-container)
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-19T07:10:12.650384688Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 9\nTCP: inuse 0 orphan 0 tw 25 alloc 168 mem 0\nUDP: inuse 0 mem 256\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52686", "serverIp": "10.42.0.36", "referer": "", "latency": "0.000348248s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-19T07:10:13.67737702Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 9\nTCP: inuse 0 orphan 0 tw 25 alloc 168 mem 0\nUDP: inuse 0 mem 256\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52686", "serverIp": "10.42.0.36", "referer": "", "latency": "0.000290081s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-19T07:10:14.726464988Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 9\nTCP: inuse 0 orphan 0 tw 25 alloc 168 mem 0\nUDP: inuse 0 mem 256\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52686", "serverIp": "10.42.0.36", "referer": "", "latency": "0.000768828s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-19T07:10:15.766776681Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 9\nTCP: inuse 0 orphan 0 tw 25 alloc 168 mem 0\nUDP: inuse 0 mem 256\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52686", "serverIp": "10.42.0.36", "referer": "", "latency": "0.000718329s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+queue-proxy {"severity":"ERROR","timestamp":"2024-01-19T07:10:16.807792449Z","logger":"queueproxy","caller":"network/error_handler.go:33","message":"error reverse proxying request; sockstat: sockets: used 9\nTCP: inuse 0 orphan 0 tw 25 alloc 168 mem 0\nUDP: inuse 0 mem 256\nUDPLITE: inuse 0\nRAW: inuse 0\nFRAG: inuse 0 memory 0\n","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm","error":"dial tcp 127.0.0.1:8080: connect: connection refused","stacktrace":"knative.dev/pkg/network.ErrorHandler.func1\n\tknative.dev/pkg@v0.0.0-20240115132401-f95090a164db/network/error_handler.go:33\nnet/http/httputil.(*ReverseProxy).ServeHTTP\n\tnet/http/httputil/reverseproxy.go:475\nknative.dev/serving/pkg/queue.(*appRequestMetricsHandler).ServeHTTP\n\tknative.dev/serving/pkg/queue/request_metric.go:199\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ProxyHandler.func3\n\tknative.dev/serving/pkg/queue/handler.go:76\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/queue/sharedmain.mainHandler.ForwardedShimHandler.func4\n\tknative.dev/serving/pkg/queue/forwarded_shim.go:54\nnet/http.HandlerFunc.ServeHTTP\n\tnet/http/server.go:2136\nknative.dev/serving/pkg/http/handler.(*timeoutHandler).ServeHTTP.func4\n\tknative.dev/serving/pkg/http/handler/timeout.go:118"}
+queue-proxy {"httpRequest": {"requestMethod": "GET", "requestUrl": "/", "requestSize": "0", "status": 502, "responseSize": "53", "userAgent": "curl/8.4.0", "remoteIp": "10.42.0.20:52686", "serverIp": "10.42.0.36", "referer": "", "latency": "0.000729954s", "protocol": "HTTP/1.1"}, "traceId": "]"}
+
+# Depending on the timing, it is possible that errors propagate to the caller:
+* Connection #0 to host test-probe.default.172.17.0.100.sslip.io left intact
+*   Trying 172.17.0.100:80...
+* Connected to test-probe.default.172.17.0.100.sslip.io (172.17.0.100) port 80
+< HTTP/1.1 502 Bad Gateway
+HTTP/1.1 502 Bad Gateway
+< server: envoy
+server: envoy
+>
+dial tcp 127.0.0.1:8080: connect: connection refused
+```
+
+The same test with the liveness-probe on the second container
+
+```bash
 # use a curl pod to deactivate different probes
 kubectl exec deployment/curl -n default -it -- curl -iv http://<pod-ip>:8090/toggleLive
 
 # Logs
 # K8s will restart the sidecar container
-first-container Starting server. Listening on port:  8080
-second-container Starting server. Listening on port:  8090
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:30:36.643425616Z","logger":"queueproxy","caller":"sharedmain/main.go:268","message":"Starting queue-proxy","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-6jqtf"}
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:30:36.643470491Z","logger":"queueproxy","caller":"sharedmain/main.go:274","message":"Starting http server metrics:9090","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-6jqtf"}
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:30:36.643478074Z","logger":"queueproxy","caller":"sharedmain/main.go:274","message":"Starting http server main:8012","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-6jqtf"}
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:30:36.643548199Z","logger":"queueproxy","caller":"sharedmain/main.go:274","message":"Starting http server admin:8022","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-6jqtf"}
 second-container Liveness probe called, responding with:  false
-queue-proxy {"severity":"INFO","timestamp":"2024-01-16T14:31:36.389518774Z","logger":"queueproxy","caller":"sharedmain/handlers.go:107","message":"Attached drain handler from user-container&{GET /wait-for-drain HTTP/1.1 1 1 map[Accept:[*/*] Accept-Encoding:[gzip] User-Agent:[kube-lifecycle/1.28]] {} <nil> 0 ] false 10.42.0.15:8022 map] map] <nil> map] 10.42.0.1:42442 /wait-for-drain <nil> <nil> <nil> 0x40006b3c20}","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00005","knative.dev/pod":"test-probe-00005-deployment-68f4d64498-6jqtf"}
-Stream closed EOF for default/test-probe-00005-deployment-68f4d64498-6jqtf (second-container)
 first-container Liveness probe called, responding with:  true
-second-container Liveness probe called, responding with:  true
+second-container Liveness probe called, responding with:  false
+first-container Liveness probe called, responding with:  true
+queue-proxy {"severity":"INFO","timestamp":"2024-01-19T07:12:41.367340204Z","logger":"queueproxy","caller":"sharedmain/handlers.go:107","message":"Attached drain handler from user-container&{GET /wait-for-drain HTTP/1.1 1 1 map[Accept:[*/*] Accept-Encoding:[gzip] User-Agent:[kube-lifecycle/1.28]] {} <nil> 0 ] false 10.42.0.36:8022 map] map] <nil> map] 10.42.0.1:40470 /wait-for-drain <nil> <nil> <nil> 0x4000467130}","commit":"d96dabb-dirty","knative.dev/key":"default/test-probe-00001","knative.dev/pod":"test-probe-00001-deployment-78cbfd5cb6-tmsfm"}
+Stream closed EOF for default/test-probe-00001-deployment-78cbfd5cb6-tmsfm (second-container)
+first-container Liveness probe called, responding with:  true
+first-container Liveness probe called, responding with:  true
+
+# Now it depends on what the sidecar actually does. If it is important for the request-path, users could see errors as well
+# We also seem to have an issue here, K8s attaches the wait-for-drain hook, but our pod is immediately terminated anyway.
 ```
 
 ### Summary
 
-* Liveness probes can be enabled without interference, <span style="color:red">but no additional header is injected</span>. So we at least would need to fix this, otherwise LivenessProbes can not target Queue-Proxy.
-* But this can cause some race conditions:
+* Liveness probes can not be enabled without interference. We need to
+  * Add the additional header also for additional probes
+  * Investigate why the wait-for-drain hook is not working (or not holding the SIGTERM long enough)
+* Also. there can be race conditions:
   * Queue-Proxy (and other Knative components) will not know about the UC being not live and being restarted. We'll see `HTTP/1.1 503 Service Unavailable` when calling the Knative Service
-  * The same applies for sidecars. Queue-Proxy (and other Knative components) will not know about this. Depending on what the sidecar does, this can cause issues.
+  * The same applies for sidecars. Queue-Proxy (and other Knative components) will not know about this. Depending on what the sidecar does, this can cause issues
+  * Users are required to also fail ReadinessProbes to make sure traffic is removed from a restarting service. Note: there is still no timing guarantees here, but this is the same issue with vanilla K8s workload
 
 
 ## Testing ReadinessProbes with multiple containers
