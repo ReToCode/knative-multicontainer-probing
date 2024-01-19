@@ -75,7 +75,8 @@ ko apply -f 1-single-container/10-ksvc-exec-probe-readiness.yaml
 curl -iv http://runtime.default.172.17.0.100.sslip.io/toggleExec
 
 # Knative is happy
-k get ksvc,configuration,revision,king
+k get ksvc,configuration,revision,king,sks
+
 NAME                                  URL                                            LATESTCREATED   LATESTREADY     READY   REASON
 service.serving.knative.dev/runtime   http://runtime.default.172.17.0.100.sslip.io   runtime-00001   runtime-00001   True
 
@@ -87,6 +88,9 @@ revision.serving.knative.dev/runtime-00001   runtime                          1 
 
 NAME                                              READY   REASON
 ingress.networking.internal.knative.dev/runtime   True
+
+NAME                                                              MODE    ACTIVATORS   SERVICENAME     PRIVATESERVICENAME      READY     REASON
+serverlessservice.networking.internal.knative.dev/runtime-00001   Proxy   3            runtime-00001   runtime-00001-private   Unknown   NoHealthyBackends
 
 # Queue-Proxy readiness is ok
 kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.29:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
@@ -110,7 +114,7 @@ activator request timeout%
 #### Summary
 * This works as expected traffic wise, even though Knative does not reflect the state properly
 * Queue-Proxy probe is reflecting the "wrong" state
-* This only works because K8s will remove the endpoints from the private service, so Activator cannot route traffic any longer
+* This only works because Knative threads exec readiness probes differently. Normally, activator would send requests to all Pods that pass Queue-Proxy readiness checks. In this case, Queue-Proxy readiness is ok, but traffic is still not forwarded. When an exec readiness probe is present, Activator waits for the endpoints to be populated as "ready" (`addresses` field) by K8s.
 * The situation will not resolve itself, requests will be buffered until that probe is good again
 
 
@@ -361,6 +365,7 @@ HTTP/1.1 200 OK
 
 ### Summary
 * Readiness probes on a single container work as expected
+* Initially, deployments must become ready at least once to make the `Revision` progress. Without a revision, no `KIngress` is generated. So we can say, we depend on a full K8s initial ready state to progress with KService initialization
 * On additional containers, the readiness probes currently do not work, as Knative and ingress layer is not aware of the additional checks
 * The state we represent in the SKS is correct, but does not change routing.
 * Activator knows where to send requests to, even when endpoints on private service is not populated
