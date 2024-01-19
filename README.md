@@ -255,7 +255,7 @@ first-container Liveness probe called, responding with:  true
 ko apply -f 2-multi-container/5-ksvc-readiness-toggle.yaml
 
 # toggle readiness in main container
-kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8080/toggleReady
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.37:8080/toggleReady
 
 # Knative Service is not ready, as we are waiting for Endpoints
 k get ksvc
@@ -274,12 +274,12 @@ curl -iv http://test-probe.default.172.17.0.100.sslip.io
 HTTP/1.1 404 Not Found
 
 # set the second container to ready
-kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8090/toggleReady
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.37:8090/toggleReady
 
 # every thing works now as expected
 
 # set the first container to not ready
-kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8080/toggleReady
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.37:8080/toggleReady
 
 # QP knows about it and starts polling again
 queue-proxy context deadline exceeded
@@ -287,11 +287,12 @@ first-container Readiness probe called, responding with:  false
 first-container Readiness probe called, responding with:  false
 
 # QPs own readiness-probe starts to fail:
-kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.18:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
+kubectl exec deployment/curl -n default -it -- curl -iv http://10.42.0.37:8012 -H "K-Network-Probe: queue" -H "K-Kubelet-Probe: value"
 HTTP/1.1 503 Service Unavailable
 
-# But, Knative still thinks everything is fine:
-k get configuration,ksvc,king
+# Knative will only reflect the error in the SKS
+k get configuration,ksvc,king,sks
+
 NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
 configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
 
@@ -300,6 +301,9 @@ service.serving.knative.dev/test-probe   http://test-probe.default.172.17.0.100.
 
 NAME                                                 READY   REASON
 ingress.networking.internal.knative.dev/test-probe   True
+
+NAME                                                                 MODE    ACTIVATORS   SERVICENAME        PRIVATESERVICENAME         READY     REASON
+serverlessservice.networking.internal.knative.dev/test-probe-00001   Proxy   3            test-probe-00001   test-probe-00001-private   Unknown   NoHealthyBackends
 
 # But K8s has removed the endpoints:
 k get endpoints -n default test-probe-00001-private
@@ -312,6 +316,8 @@ test-probe-00001-private               7m19s
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641432431Z","logger":"activator","caller":"net/revision_backends.go:328","message":"Need to reprobe pods who became non-ready","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001","IPs":{"keys":"10.42.0.18:8012"}}
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641752724Z","logger":"activator","caller":"net/throttler.go:331","message":"Updating Revision Throttler with: clusterIP = <nil>, trackers = 0, backends = 0","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
 {"severity":"INFO","timestamp":"2024-01-16T14:53:44.641780141Z","logger":"activator","caller":"net/throttler.go:323","message":"Set capacity to 0 (backends: 0, index: 0/1)","commit":"d96dabb-dirty","knative.dev/controller":"activator","knative.dev/pod":"activator-865458fff9-5fgpf","knative.dev/key":"default/test-probe-00001"}
+
+# So client request will hang, and eventually timeout (or work again when probes get healthy again).
 ```
 
 For the same test with the second container we have:
@@ -330,8 +336,10 @@ kubernetes                 192.168.5.1:6443                  42d
 test-probe-00001           10.42.0.17:8012,10.42.0.17:8112   14m
 test-probe-00001-private                                     14m
 
-# Knative still thinks everything is great:
- k get configuration,ksvc,king
+# Knative will internally not know that something is wrong, but because K8s fails the pod status
+# SKS thinkgs there are no healthy backends
+k get configuration,ksvc,king,sks
+
 NAME                                           LATESTCREATED      LATESTREADY        READY   REASON
 configuration.serving.knative.dev/test-probe   test-probe-00001   test-probe-00001   True
 
@@ -341,16 +349,18 @@ service.serving.knative.dev/test-probe   http://test-probe.default.172.17.0.100.
 NAME                                                 READY   REASON
 ingress.networking.internal.knative.dev/test-probe   True
 
-# and traffic will work, which it should not
+NAME                                                                 MODE    ACTIVATORS   SERVICENAME        PRIVATESERVICENAME         READY     REASON
+serverlessservice.networking.internal.knative.dev/test-probe-00001   Proxy   3            test-probe-00001   test-probe-00001-private   Unknown   NoHealthyBackends
+
+# But traffic will still work, which it should not
 curl  -iv http://test-probe.default.172.17.0.100.sslip.io
 HTTP/1.1 200 OK
 
-# because Activator is only checking QP health, which does not know about the additional container.
+# because Activator is only checking QP health, which does not know about the additional container or the pods overall health.
 ```
 
 ### Summary
-
-If we allow ReadinessProbes for additional containers, we have at least these race conditions:
-
-- If a sidecar container does not become ready, the `Revision`, `Configuration` and `KService` are in unknown status.
-- `KIngress` object is not created.
+* Readiness probes on a single container work as expected
+* On additional containers, the readiness probes currently do not work, as Knative and ingress layer is not aware of the additional checks
+* The state we represent in the SKS is correct, but does not change routing.
+* Activator knows where to send requests to, even when endpoints on private service is not populated
