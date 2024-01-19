@@ -364,3 +364,5 @@ HTTP/1.1 200 OK
 * On additional containers, the readiness probes currently do not work, as Knative and ingress layer is not aware of the additional checks
 * The state we represent in the SKS is correct, but does not change routing.
 * Activator knows where to send requests to, even when endpoints on private service is not populated
+  * Activator uses `notReadyAddresses` field in `Endpoints` to do its own probing. If the main probe on QP is ok, activator will forward requests to that pod, even when Kubernetes does not populate it in `Endpoints` and is failing its overall `Pod` readiness.
+  * We definitely need to aggregate the readiness of every container in Queue-Proxy to make this consistent
