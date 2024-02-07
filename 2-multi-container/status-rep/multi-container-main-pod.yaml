@@ -1,0 +1,331 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    autoscaling.knative.dev/min-scale: "1"
+    serving.knative.dev/creator: system:admin
+  creationTimestamp: "2024-02-07T09:14:07Z"
+  generateName: test-probe-00001-deployment-9d6856b98-
+  labels:
+    app: test-probe-00001
+    pod-template-hash: 9d6856b98
+    service.istio.io/canonical-name: test-probe
+    service.istio.io/canonical-revision: test-probe-00001
+    serving.knative.dev/configuration: test-probe
+    serving.knative.dev/configurationGeneration: "1"
+    serving.knative.dev/configurationUID: cb2b671b-9b50-4a1c-b673-0559233c2144
+    serving.knative.dev/revision: test-probe-00001
+    serving.knative.dev/revisionUID: b4b7920c-54d1-4376-81af-80da8132ba49
+    serving.knative.dev/service: test-probe
+    serving.knative.dev/serviceUID: 029ba619-3cba-4bd4-b01e-fb94181cba25
+  name: test-probe-00001-deployment-9d6856b98-xvkp9
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: test-probe-00001-deployment-9d6856b98
+    uid: 2733bc71-db2f-4305-bb4a-9a77dcd25701
+  resourceVersion: "2811415"
+  uid: da53fcf5-4dc7-4718-b1ae-b32d44630916
+spec:
+  containers:
+  - env:
+    - name: PORT
+      value: "8080"
+    - name: K_REVISION
+      value: test-probe-00001
+    - name: K_CONFIGURATION
+      value: test-probe
+    - name: K_SERVICE
+      value: test-probe
+    image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    imagePullPolicy: IfNotPresent
+    lifecycle:
+      preStop:
+        httpGet:
+          path: /wait-for-drain
+          port: 8022
+          scheme: HTTP
+    name: first-container
+    ports:
+    - containerPort: 8080
+      name: user-port
+      protocol: TCP
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: FallbackToLogsOnError
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-6p2gd
+      readOnly: true
+  - env:
+    - name: PORT
+      value: "8090"
+    - name: K_REVISION
+      value: test-probe-00001
+    - name: K_CONFIGURATION
+      value: test-probe
+    - name: K_SERVICE
+      value: test-probe
+    image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    imagePullPolicy: IfNotPresent
+    lifecycle:
+      preStop:
+        httpGet:
+          path: /wait-for-drain
+          port: 8022
+          scheme: HTTP
+    name: second-container
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        path: /ready
+        port: 8090
+        scheme: HTTP
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    resources: {}
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: FallbackToLogsOnError
+    volumeMounts:
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-6p2gd
+      readOnly: true
+  - env:
+    - name: SERVING_NAMESPACE
+      value: default
+    - name: SERVING_SERVICE
+      value: test-probe
+    - name: SERVING_CONFIGURATION
+      value: test-probe
+    - name: SERVING_REVISION
+      value: test-probe-00001
+    - name: QUEUE_SERVING_PORT
+      value: "8012"
+    - name: QUEUE_SERVING_TLS_PORT
+      value: "8112"
+    - name: CONTAINER_CONCURRENCY
+      value: "0"
+    - name: REVISION_TIMEOUT_SECONDS
+      value: "300"
+    - name: REVISION_RESPONSE_START_TIMEOUT_SECONDS
+      value: "0"
+    - name: REVISION_IDLE_TIMEOUT_SECONDS
+      value: "0"
+    - name: SERVING_POD
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: metadata.name
+    - name: SERVING_POD_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.podIP
+    - name: SERVING_LOGGING_CONFIG
+    - name: SERVING_LOGGING_LEVEL
+      value: debug
+    - name: SERVING_REQUEST_LOG_TEMPLATE
+      value: '{"httpRequest": {"requestMethod": "{{.Request.Method}}", "requestUrl":
+        "{{js .Request.RequestURI}}", "requestSize": "{{.Request.ContentLength}}",
+        "status": {{.Response.Code}}, "responseSize": "{{.Response.Size}}", "userAgent":
+        "{{js .Request.UserAgent}}", "remoteIp": "{{js .Request.RemoteAddr}}", "serverIp":
+        "{{.Revision.PodIP}}", "referer": "{{js .Request.Referer}}", "latency": "{{.Response.Latency}}s",
+        "protocol": "{{.Request.Proto}}"}, "traceId": "{{index .Request.Header "X-B3-Traceid"}}"}'
+    - name: SERVING_ENABLE_REQUEST_LOG
+      value: "true"
+    - name: SERVING_REQUEST_METRICS_BACKEND
+      value: prometheus
+    - name: SERVING_REQUEST_METRICS_REPORTING_PERIOD_SECONDS
+      value: "5"
+    - name: TRACING_CONFIG_BACKEND
+      value: none
+    - name: TRACING_CONFIG_ZIPKIN_ENDPOINT
+    - name: TRACING_CONFIG_DEBUG
+      value: "false"
+    - name: TRACING_CONFIG_SAMPLE_RATE
+      value: "0.1"
+    - name: USER_PORT
+      value: "8080"
+    - name: SYSTEM_NAMESPACE
+      value: knative-serving
+    - name: METRICS_DOMAIN
+      value: knative.dev/internal/serving
+    - name: SERVING_READINESS_PROBE
+      value: '{"httpGet":{"path":"/ready","port":8080,"host":"127.0.0.1","scheme":"HTTP","httpHeaders":[{"name":"K-Kubelet-Probe","value":"queue"}]},"successThreshold":1}'
+    - name: ENABLE_PROFILING
+      value: "false"
+    - name: SERVING_ENABLE_PROBE_REQUEST_LOG
+      value: "true"
+    - name: METRICS_COLLECTOR_ADDRESS
+    - name: HOST_IP
+      valueFrom:
+        fieldRef:
+          apiVersion: v1
+          fieldPath: status.hostIP
+    - name: ENABLE_HTTP2_AUTO_DETECTION
+      value: "false"
+    - name: ENABLE_HTTP_FULL_DUPLEX
+      value: "false"
+    - name: ROOT_CA
+    image: ko.local/queue-39be6f1d08a095bd076a71d288d295b6:118a89d6c3f25c0aad89c0c30ce49420307d7c2ddec5b78efe73c9e12553b391
+    imagePullPolicy: IfNotPresent
+    name: queue-proxy
+    ports:
+    - containerPort: 8022
+      name: http-queueadm
+      protocol: TCP
+    - containerPort: 9090
+      name: http-autometric
+      protocol: TCP
+    - containerPort: 9091
+      name: http-usermetric
+      protocol: TCP
+    - containerPort: 8012
+      name: queue-port
+      protocol: TCP
+    - containerPort: 8112
+      name: https-port
+      protocol: TCP
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        httpHeaders:
+        - name: K-Network-Probe
+          value: queue
+        path: /
+        port: 8012
+        scheme: HTTP
+      periodSeconds: 10
+      successThreshold: 1
+      timeoutSeconds: 1
+    resources:
+      requests:
+        cpu: 25m
+    securityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+        - ALL
+      readOnlyRootFilesystem: true
+      runAsNonRoot: true
+      seccompProfile:
+        type: RuntimeDefault
+    terminationMessagePath: /dev/termination-log
+    terminationMessagePolicy: File
+    volumeMounts:
+    - mountPath: /var/lib/knative/certs
+      name: server-certs
+      readOnly: true
+    - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+      name: kube-api-access-6p2gd
+      readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: false
+  nodeName: colima
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 300
+  tolerations:
+  - effect: NoExecute
+    key: node.kubernetes.io/not-ready
+    operator: Exists
+    tolerationSeconds: 300
+  - effect: NoExecute
+    key: node.kubernetes.io/unreachable
+    operator: Exists
+    tolerationSeconds: 300
+  volumes:
+  - name: server-certs
+    secret:
+      defaultMode: 420
+      secretName: serving-certs
+  - name: kube-api-access-6p2gd
+    projected:
+      defaultMode: 420
+      sources:
+      - serviceAccountToken:
+          expirationSeconds: 3607
+          path: token
+      - configMap:
+          items:
+          - key: ca.crt
+            path: ca.crt
+          name: kube-root-ca.crt
+      - downwardAPI:
+          items:
+          - fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+            path: namespace
+status:
+  conditions:
+  - lastProbeTime: null
+    lastTransitionTime: "2024-02-07T09:14:07Z"
+    status: "True"
+    type: Initialized
+  - lastProbeTime: null
+    lastTransitionTime: "2024-02-07T09:14:07Z"
+    message: 'containers with unready status: [second-container queue-proxy]'
+    reason: ContainersNotReady
+    status: "False"
+    type: Ready
+  - lastProbeTime: null
+    lastTransitionTime: "2024-02-07T09:14:07Z"
+    message: 'containers with unready status: [second-container queue-proxy]'
+    reason: ContainersNotReady
+    status: "False"
+    type: ContainersReady
+  - lastProbeTime: null
+    lastTransitionTime: "2024-02-07T09:14:07Z"
+    status: "True"
+    type: PodScheduled
+  containerStatuses:
+  - containerID: docker://cb1ab320b8c0d9325a4d45eabaa8ba94146ce9d1ae91b3778c07a801adff0278
+    image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    imageID: docker://sha256:d2c6e8c30438931e5e3289ad053ea105a984bef8e8a95d70d9032364807750f3
+    lastState: {}
+    name: first-container
+    ready: true
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2024-02-07T09:14:07Z"
+  - containerID: docker://6a43ba99572e9f18d72ce4ccb6b08a5c2b3ccbad626c1738227e070d7b79b201
+    image: ko.local/queue-39be6f1d08a095bd076a71d288d295b6:118a89d6c3f25c0aad89c0c30ce49420307d7c2ddec5b78efe73c9e12553b391
+    imageID: docker://sha256:72350b1b53d72eaf1fb1c9a214c91908643bf336658631518a017485f673383e
+    lastState: {}
+    name: queue-proxy
+    ready: false
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2024-02-07T09:14:07Z"
+  - containerID: docker://115f60e2a99aef488871a6e9ef044625addac2bdf5578eb3f199fdbd3c4ee84d
+    image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    imageID: docker://sha256:d2c6e8c30438931e5e3289ad053ea105a984bef8e8a95d70d9032364807750f3
+    lastState: {}
+    name: second-container
+    ready: false
+    restartCount: 0
+    started: true
+    state:
+      running:
+        startedAt: "2024-02-07T09:14:07Z"
+  hostIP: 192.168.5.1
+  phase: Running
+  podIP: 10.42.0.194
+  podIPs:
+  - ip: 10.42.0.194
+  qosClass: Burstable
+  startTime: "2024-02-07T09:14:07Z"

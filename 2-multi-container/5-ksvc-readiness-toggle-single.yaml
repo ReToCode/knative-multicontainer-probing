@@ -1,0 +1,20 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: test-probe
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/min-scale: "1"
+    spec:
+      containers:
+      - name: first-container
+        image: ko://github.com/retocode/knative-multicontainer-probing/test-server
+        ports:
+          - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            port: 8080 # this will directly call the user-container, not QP
+            path: "/ready"

@@ -1,0 +1,81 @@
+apiVersion: serving.knative.dev/v1
+kind: Revision
+metadata:
+  annotations:
+    autoscaling.knative.dev/min-scale: "1"
+    serving.knative.dev/creator: system:admin
+    serving.knative.dev/routes: test-probe
+    serving.knative.dev/routingStateModified: "2024-02-07T08:11:27Z"
+  creationTimestamp: "2024-02-07T08:11:27Z"
+  generation: 1
+  labels:
+    serving.knative.dev/configuration: test-probe
+    serving.knative.dev/configurationGeneration: "1"
+    serving.knative.dev/configurationUID: 247d895e-e0ec-4038-93b9-0a3a12820876
+    serving.knative.dev/routingState: active
+    serving.knative.dev/service: test-probe
+    serving.knative.dev/serviceUID: ec03c2cc-628a-49fb-80b1-366d4649c003
+  name: test-probe-00001
+  namespace: default
+  ownerReferences:
+  - apiVersion: serving.knative.dev/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: Configuration
+    name: test-probe
+    uid: 247d895e-e0ec-4038-93b9-0a3a12820876
+  resourceVersion: "2797402"
+  uid: 1cde5ea1-18c8-4a27-b082-43b9f681eeab
+spec:
+  containerConcurrency: 0
+  containers:
+  - image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    name: first-container
+    ports:
+    - containerPort: 8080
+      protocol: TCP
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8080
+      successThreshold: 1
+    resources: {}
+  - env:
+    - name: PORT
+      value: "8090"
+    image: ko.local/test-server-4e77235dce690edd6b45122a823a55c7:6e75008c345f398da10018549431a019a589c8d22b0935120f658f1a4c0a8ae1
+    name: second-container
+    readinessProbe:
+      httpGet:
+        path: /ready
+        port: 8090
+      successThreshold: 1
+    resources: {}
+  enableServiceLinks: false
+  timeoutSeconds: 300
+status:
+  actualReplicas: 0
+  conditions:
+  - lastTransitionTime: "2024-02-07T08:11:27Z"
+    message: Requests to the target are being buffered as resources are provisioned.
+    reason: Queued
+    severity: Info
+    status: Unknown
+    type: Active
+  - lastTransitionTime: "2024-02-07T08:11:27Z"
+    reason: Deploying
+    status: Unknown
+    type: ContainerHealthy
+  - lastTransitionTime: "2024-02-07T08:11:27Z"
+    reason: Deploying
+    status: Unknown
+    type: Ready
+  - lastTransitionTime: "2024-02-07T08:11:27Z"
+    reason: Deploying
+    status: Unknown
+    type: ResourcesAvailable
+  containerStatuses:
+  - name: first-container
+  - name: second-container
+  desiredReplicas: 1
+  observedGeneration: 1
