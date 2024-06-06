@@ -11,11 +11,19 @@ import (
 var isLive = true
 var execOk = true
 var isReady = false
+var isStartupOk = true
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
+	}
+	initiallyDown := os.Getenv("INITIALLY_DOWN")
+	if initiallyDown == "true" {
+		isLive = false
+		isReady = false
+		isStartupOk = false
+		execOk = false
 	}
 
 	// if called with "exec" arg, call the server to check for exec health
@@ -39,9 +47,11 @@ func main() {
 	http.HandleFunc("/live", liveHandler)
 	http.HandleFunc("/ready", readyHandler)
 	http.HandleFunc("/exec", execHandler)
+	http.HandleFunc("/startup", startupHandler)
 	http.HandleFunc("/toggleLive", toggleLiveHandler)
 	http.HandleFunc("/toggleReady", toggleReadyHandler)
 	http.HandleFunc("/toggleExec", toggleExecHandler)
+	http.HandleFunc("/toggleStartup", toggleStartupHandler)
 	srv := &http.Server{
 		Addr:         ":" + port,
 		WriteTimeout: 15 * time.Second,
@@ -66,6 +76,12 @@ func toggleReadyHandler(writer http.ResponseWriter, request *http.Request) {
 func toggleExecHandler(writer http.ResponseWriter, request *http.Request) {
 	execOk = !execOk
 	fmt.Println("Exec is now: ", execOk)
+	writer.WriteHeader(http.StatusOK)
+}
+
+func toggleStartupHandler(writer http.ResponseWriter, request *http.Request) {
+	isStartupOk = !isStartupOk
+	fmt.Println("Startup is now: ", isStartupOk)
 	writer.WriteHeader(http.StatusOK)
 }
 
@@ -96,6 +112,15 @@ func liveHandler(writer http.ResponseWriter, request *http.Request) {
 func execHandler(writer http.ResponseWriter, request *http.Request) {
 	fmt.Println("Exec probe called, responding with: ", execOk)
 	if execOk {
+		writer.WriteHeader(http.StatusOK)
+	} else {
+		writer.WriteHeader(http.StatusServiceUnavailable)
+	}
+}
+
+func startupHandler(writer http.ResponseWriter, request *http.Request) {
+	fmt.Println("Startup probe called, responding with: ", execOk)
+	if isStartupOk {
 		writer.WriteHeader(http.StatusOK)
 	} else {
 		writer.WriteHeader(http.StatusServiceUnavailable)

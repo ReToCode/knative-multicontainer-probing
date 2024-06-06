@@ -1,0 +1,29 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: runtime
+  namespace: default
+spec:
+  template:
+    metadata:
+      annotations:
+        serving.knative.dev/progress-deadline: "600s"
+        autoscaling.knative.dev/min-scale: "1"
+    spec:
+      containers:
+      - image: ko://github.com/retocode/knative-multicontainer-probing/test-server
+        env:
+          - name: INITIALLY_DOWN
+            value: "true"
+        startupProbe:
+          failureThreshold: 300
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 30
+          httpGet:
+            port: 8080 # will be called by Kubelet
+            path: "/startup"
+
+
+

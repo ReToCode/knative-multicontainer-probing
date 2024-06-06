@@ -23,7 +23,7 @@ kubectl patch configmap/config-network \
 kubectl patch configmap/config-domain \
   --namespace knative-serving \
   --type merge \
-  --patch "{\"data\":{\"172.17.0.100.sslip.io\":\"\"}}"
+  --patch "{\"data\":{\"10.89.0.200.sslip.io\":\"\"}}"
 
 # more logs
 kubectl patch configmap/config-observability \
