@@ -45,7 +45,7 @@ kubectl delete -n default ksvc runtime
 kubectl apply -f 3-startup-probes/1-ksvc-default.yaml # ok
 ```
 
-## Testing with a startup-probe
+## Testing defaults with a startup-probe
 
 ```bash
 kubectl delete -n default ksvc runtime
@@ -282,17 +282,17 @@ POD_IP=$(kubectl get -n default $(kubectl get po -n default -o name -l app=runti
 kubectl exec deployment/curl -n default -it -- curl -iv http://$POD_IP:8080/toggleStartup
 ```
 ```text
-The service should not transition to ready and NOT scale down to zero
+The service should transition to ready and NOT scale down to zero:
 ```
 ```bash
-# and the service cannot yet be called from outside of the cluster:
+# and the service can now be called from outside of the cluster:
 curl -i http://runtime.default.10.89.0.200.sslip.io 
 ```
 ```text
 HTTP/1.1 200 OK
 ```
 ```bash
-# and also not from inside of the cluster (K8s service is missing)
+# and from inside of the cluster
 kubectl exec deployment/curl -n default -it -- curl -iv http://runtime.default.svc.cluster.local
 ```
 ```text

@@ -1,0 +1,292 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    autoscaling.knative.dev/min-scale: "1"
+    serving.knative.dev/creator: kubernetes-admin
+    serving.knative.dev/progress-deadline: 600s
+  creationTimestamp: "2024-06-06T12:08:45Z"
+  generateName: runtime-00001-deployment-7b57d4f9d8-
+  labels:
+    app: runtime-00001
+    pod-template-hash: 7b57d4f9d8
+    serving.knative.dev/configuration: runtime
+    serving.knative.dev/configurationGeneration: "1"
+    serving.knative.dev/configurationUID: 610c00e2-75df-4016-a745-3bf94b27a8e7
+    serving.knative.dev/revision: runtime-00001
+    serving.knative.dev/revisionUID: 15945cf2-e321-44e7-8fb1-aa32474e3065
+    serving.knative.dev/service: runtime
+    serving.knative.dev/serviceUID: 472c6300-7550-4e9d-bc25-08b10c1536da
+  name: runtime-00001-deployment-7b57d4f9d8-5s7kv
+  namespace: default
+  ownerReferences:
+    - apiVersion: apps/v1
+      blockOwnerDeletion: true
+      controller: true
+      kind: ReplicaSet
+      name: runtime-00001-deployment-7b57d4f9d8
+      uid: f9a5de18-6c77-4077-8db8-c6d6ea553916
+  resourceVersion: "720080"
+  uid: fbd1189f-9a20-4b26-8ce1-f5c342819cb0
+spec:
+  containers:
+    - env:
+        - name: INITIALLY_DOWN
+          value: "true"
+        - name: PORT
+          value: "8080"
+        - name: K_REVISION
+          value: runtime-00001
+        - name: K_CONFIGURATION
+          value: runtime
+        - name: K_SERVICE
+          value: runtime
+      image: kind.local/test-server-4e77235dce690edd6b45122a823a55c7:57e1a29f93340f7498c46d65132123caefe5206cb30f666ce3724fda0bb186c3
+      imagePullPolicy: IfNotPresent
+      lifecycle:
+        preStop:
+          httpGet:
+            path: /wait-for-drain
+            port: 8022
+            scheme: HTTP
+      name: user-container
+      ports:
+        - containerPort: 8080
+          name: user-port
+          protocol: TCP
+      resources: {}
+      startupProbe:
+        failureThreshold: 10
+        httpGet:
+          path: /startup
+          port: 8080
+          scheme: HTTP
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 30
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: FallbackToLogsOnError
+      volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-8qkvk
+          readOnly: true
+    - env:
+        - name: SERVING_NAMESPACE
+          value: default
+        - name: SERVING_SERVICE
+          value: runtime
+        - name: SERVING_CONFIGURATION
+          value: runtime
+        - name: SERVING_REVISION
+          value: runtime-00001
+        - name: QUEUE_SERVING_PORT
+          value: "8012"
+        - name: QUEUE_SERVING_TLS_PORT
+          value: "8112"
+        - name: CONTAINER_CONCURRENCY
+          value: "0"
+        - name: REVISION_TIMEOUT_SECONDS
+          value: "300"
+        - name: REVISION_RESPONSE_START_TIMEOUT_SECONDS
+          value: "0"
+        - name: REVISION_IDLE_TIMEOUT_SECONDS
+          value: "0"
+        - name: SERVING_POD
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: SERVING_POD_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+        - name: SERVING_LOGGING_CONFIG
+        - name: SERVING_LOGGING_LEVEL
+          value: debug
+        - name: SERVING_REQUEST_LOG_TEMPLATE
+          value: '{"httpRequest": {"requestMethod": "{{.Request.Method}}", "requestUrl":
+        "{{js .Request.RequestURI}}", "requestSize": "{{.Request.ContentLength}}",
+        "status": {{.Response.Code}}, "responseSize": "{{.Response.Size}}", "userAgent":
+        "{{js .Request.UserAgent}}", "remoteIp": "{{js .Request.RemoteAddr}}", "serverIp":
+        "{{.Revision.PodIP}}", "referer": "{{js .Request.Referer}}", "latency": "{{.Response.Latency}}s",
+        "protocol": "{{.Request.Proto}}"}, "traceId": "{{index .Request.Header "X-B3-Traceid"}}"}'
+        - name: SERVING_ENABLE_REQUEST_LOG
+          value: "true"
+        - name: SERVING_REQUEST_METRICS_BACKEND
+          value: prometheus
+        - name: SERVING_REQUEST_METRICS_REPORTING_PERIOD_SECONDS
+          value: "5"
+        - name: TRACING_CONFIG_BACKEND
+          value: none
+        - name: TRACING_CONFIG_ZIPKIN_ENDPOINT
+        - name: TRACING_CONFIG_DEBUG
+          value: "false"
+        - name: TRACING_CONFIG_SAMPLE_RATE
+          value: "0.1"
+        - name: USER_PORT
+          value: "8080"
+        - name: SYSTEM_NAMESPACE
+          value: knative-serving
+        - name: METRICS_DOMAIN
+          value: knative.dev/internal/serving
+        - name: SERVING_READINESS_PROBE
+          value: '{"tcpSocket":{"port":8080,"host":"127.0.0.1"},"successThreshold":1}'
+        - name: ENABLE_PROFILING
+          value: "false"
+        - name: SERVING_ENABLE_PROBE_REQUEST_LOG
+          value: "true"
+        - name: METRICS_COLLECTOR_ADDRESS
+        - name: HOST_IP
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.hostIP
+        - name: ENABLE_HTTP2_AUTO_DETECTION
+          value: "false"
+        - name: ENABLE_HTTP_FULL_DUPLEX
+          value: "false"
+        - name: ROOT_CA
+        - name: ENABLE_MULTI_CONTAINER_PROBES
+          value: "false"
+      image: kind.local/queue-39be6f1d08a095bd076a71d288d295b6:277a9a9b29503bb77d7662d9b723b2bdbb5902f0dab3b4b6726130b33ada49ff
+      imagePullPolicy: IfNotPresent
+      name: queue-proxy
+      ports:
+        - containerPort: 8022
+          name: http-queueadm
+          protocol: TCP
+        - containerPort: 9090
+          name: http-autometric
+          protocol: TCP
+        - containerPort: 9091
+          name: http-usermetric
+          protocol: TCP
+        - containerPort: 8012
+          name: queue-port
+          protocol: TCP
+        - containerPort: 8112
+          name: https-port
+          protocol: TCP
+      readinessProbe:
+        failureThreshold: 3
+        httpGet:
+          httpHeaders:
+            - name: K-Network-Probe
+              value: queue
+          path: /
+          port: 8012
+          scheme: HTTP
+        periodSeconds: 10
+        successThreshold: 1
+        timeoutSeconds: 1
+      resources:
+        requests:
+          cpu: 25m
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      terminationMessagePath: /dev/termination-log
+      terminationMessagePolicy: File
+      volumeMounts:
+        - mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+          name: kube-api-access-8qkvk
+          readOnly: true
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: false
+  nodeName: kind-worker3
+  preemptionPolicy: PreemptLowerPriority
+  priority: 0
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  securityContext: {}
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 300
+  tolerations:
+    - effect: NoExecute
+      key: node.kubernetes.io/not-ready
+      operator: Exists
+      tolerationSeconds: 300
+    - effect: NoExecute
+      key: node.kubernetes.io/unreachable
+      operator: Exists
+      tolerationSeconds: 300
+  volumes:
+    - name: kube-api-access-8qkvk
+      projected:
+        defaultMode: 420
+        sources:
+          - serviceAccountToken:
+              expirationSeconds: 3607
+              path: token
+          - configMap:
+              items:
+                - key: ca.crt
+                  path: ca.crt
+              name: kube-root-ca.crt
+          - downwardAPI:
+              items:
+                - fieldRef:
+                    apiVersion: v1
+                    fieldPath: metadata.namespace
+                  path: namespace
+status:
+  conditions:
+    - lastProbeTime: null
+      lastTransitionTime: "2024-06-06T12:08:45Z"
+      status: "True"
+      type: Initialized
+    - lastProbeTime: null
+      lastTransitionTime: "2024-06-06T12:08:45Z"
+      message: 'containers with unready status: [user-container]'
+      reason: ContainersNotReady
+      status: "False"
+      type: Ready
+    - lastProbeTime: null
+      lastTransitionTime: "2024-06-06T12:08:45Z"
+      message: 'containers with unready status: [user-container]'
+      reason: ContainersNotReady
+      status: "False"
+      type: ContainersReady
+    - lastProbeTime: null
+      lastTransitionTime: "2024-06-06T12:08:45Z"
+      status: "True"
+      type: PodScheduled
+  containerStatuses:
+    - containerID: containerd://f96cfe3ff6744b6317b30213f9a4eba1584f59d8d7e7da661e386ad5cc7845a2
+      image: kind.local/queue-39be6f1d08a095bd076a71d288d295b6:277a9a9b29503bb77d7662d9b723b2bdbb5902f0dab3b4b6726130b33ada49ff
+      imageID: sha256:298d286b419f73b2aca51da26371d89ca1a1cd02bdd03e8cfc732df6b3afce96
+      lastState: {}
+      name: queue-proxy
+      ready: true
+      restartCount: 0
+      started: true
+      state:
+        running:
+          startedAt: "2024-06-06T12:08:46Z"
+    - containerID: containerd://ac45c77db312b719f76d4f9b3e6e3463a2eb1449b973bb9d10980f81acbafd9d
+      image: kind.local/test-server-4e77235dce690edd6b45122a823a55c7:57e1a29f93340f7498c46d65132123caefe5206cb30f666ce3724fda0bb186c3
+      imageID: sha256:20c4249ea5a44e0af10263b46556b35cda2a4c39baba4a9ebecccbeacbb56727
+      lastState: {}
+      name: user-container
+      ready: false
+      restartCount: 0
+      started: false
+      state:
+        running:
+          startedAt: "2024-06-06T12:08:46Z"
+  hostIP: 10.89.0.4
+  phase: Running
+  podIP: 10.244.2.28
+  podIPs:
+    - ip: 10.244.2.28
+  qosClass: Burstable
+  startTime: "2024-06-06T12:08:45Z"
