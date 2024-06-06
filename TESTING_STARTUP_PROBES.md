@@ -250,3 +250,51 @@ content-length: 0
 # and also not from inside of the cluster (K8s service is missing)
 kubectl exec deployment/curl -n default -it -- curl -iv http://runtime.default.svc.cluster.local
 ```
+
+## Testing vanilla K8s deployment with startup probe and progress deadline timeout
+
+```bash
+ko apply -f 3-startup-probes/4-deploy-startup-probe-progress-deadline.yaml
+```
+
+## Testing with a startup-probe toggles, startup probe longer than progress deadline timeout, with patched Serving
+```bash
+kubectl delete -n default ksvc runtime
+ko apply -f 3-startup-probes/3-ksvc-startup-probe-initially-down-600s.yaml
+```
+```bash
+# check calculated progress deadline
+kubectl get deploy runtime-00001-deployment -n default -o jsonpath="{.spec.progressDeadlineSeconds}"
+```
+```text
+3610
+```
+```bash
+# wait for the pod to NOT be scaled down again
+sleep 15 # wait for system to detect the pod is not ready
+sleep 30 # wait for sigterm hook
+sleep 15 # buffer
+```
+
+```bash
+# toggle the startup probe
+POD_IP=$(kubectl get -n default $(kubectl get po -n default -o name -l app=runtime-00001) --template '{{.status.podIP}}')
+kubectl exec deployment/curl -n default -it -- curl -iv http://$POD_IP:8080/toggleStartup
+```
+```text
+The service should not transition to ready and NOT scale down to zero
+```
+```bash
+# and the service cannot yet be called from outside of the cluster:
+curl -i http://runtime.default.10.89.0.200.sslip.io 
+```
+```text
+HTTP/1.1 200 OK
+```
+```bash
+# and also not from inside of the cluster (K8s service is missing)
+kubectl exec deployment/curl -n default -it -- curl -iv http://runtime.default.svc.cluster.local
+```
+```text
+HTTP/1.1 200 OK
+```
