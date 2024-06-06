@@ -151,14 +151,14 @@ POD_IP=$(kubectl get -n default $(kubectl get po -n default -o name -l app=runti
 kubectl exec deployment/curl -n default -it -- curl -iv http://$POD_IP:8080/toggleStartup
 ```
 ```bash
-# and the service cannot yet be called from outside of the cluster:
+# and the service can now be called from outside of the cluster:
 curl -i http://runtime.default.10.89.0.200.sslip.io 
 ```
 ```text
 HTTP/1.1 200 OK
 ```
 ```bash
-# and also not from inside of the cluster (K8s service is missing)
+# and also from inside of the cluster
 kubectl exec deployment/curl -n default -it -- curl -i http://runtime.default.svc.cluster.local
 ```
 ```text
@@ -174,7 +174,7 @@ ko apply -f 3-startup-probes/3-ksvc-startup-probe-initially-down-10s.yaml
 # wait for the pod to be scaled down again
 sleep 15 # wait for system to detect the pod is not ready
 sleep 30 # wait for sigterm hook
-sleep 15 # buffer
+sleep 45 # activator delay (see code) and buffer
 ```
 
 ```bash
@@ -253,11 +253,14 @@ kubectl exec deployment/curl -n default -it -- curl -iv http://runtime.default.s
 
 ## Testing vanilla K8s deployment with startup probe and progress deadline timeout
 
+This case is just there to compare the behavior of a Deployment in vanilla K8s.
+
 ```bash
 ko apply -f 3-startup-probes/4-deploy-startup-probe-progress-deadline.yaml
 ```
 
 ## Testing with a startup-probe toggles, startup probe longer than progress deadline timeout, with patched Serving
+
 ```bash
 kubectl delete -n default ksvc runtime
 ko apply -f 3-startup-probes/3-ksvc-startup-probe-initially-down-600s.yaml
@@ -272,8 +275,7 @@ kubectl get deploy runtime-00001-deployment -n default -o jsonpath="{.spec.progr
 ```bash
 # wait for the pod to NOT be scaled down again
 sleep 15 # wait for system to detect the pod is not ready
-sleep 30 # wait for sigterm hook
-sleep 15 # buffer
+sleep 45 # activator delay (see code) and buffer
 ```
 
 ```bash
